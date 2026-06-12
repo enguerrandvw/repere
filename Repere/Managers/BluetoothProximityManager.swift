@@ -185,8 +185,17 @@ extension BluetoothProximityManager: CBPeripheralDelegate {
 
         // We now know this peripheral's display name
         // Update the distance entry with the correct name
-        if let oldDistance = peerDistances.values.first {
-            DispatchQueue.main.async {
+        let tempName = peripheral.name ?? peripheral.identifier.uuidString.prefix(8).description
+        
+        DispatchQueue.main.async {
+            // First check if it's already under the correct name
+            if self.peerDistances[name] != nil {
+                return
+            }
+            
+            // Otherwise, migrate the old distance to the new name
+            if let oldDistance = self.peerDistances[tempName] {
+                self.peerDistances.removeValue(forKey: tempName)
                 self.peerDistances[name] = oldDistance
             }
         }
