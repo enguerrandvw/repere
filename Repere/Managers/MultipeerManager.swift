@@ -70,10 +70,10 @@ final class MultipeerManager: NSObject, ObservableObject {
         isConnected = false
     }
 
-    /// Start sending location every 2 seconds
+    /// Start sending location every 0.25 seconds for maximum responsiveness
     func startSendingLocation(locationManager: LocationManager) {
         sendTimer?.invalidate()
-        sendTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        sendTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             self?.sendLocation(locationManager: locationManager)
         }
     }

@@ -16,9 +16,9 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.distanceFilter = 2      // update every 2 meters moved
-        manager.headingFilter = 1       // update every 1° rotation
+        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        manager.distanceFilter = kCLDistanceFilterNone  // update continuously
+        manager.headingFilter = 0.5                     // update every 0.5° rotation
     }
 
     // MARK: - Public API

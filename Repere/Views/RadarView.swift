@@ -63,7 +63,7 @@ struct RadarView: View {
             multipeerManager.disconnect()
             locationManager.stopTracking()
         }
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
             updateDirections()
         }
         .onReceive(NotificationCenter.default.publisher(for: .uwbUpdate)) { notification in
