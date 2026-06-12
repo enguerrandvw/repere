@@ -94,21 +94,33 @@ final class MultipeerManager: NSObject, ObservableObject {
         for i in peers.indices {
             guard let peerLocation = peers[i].location else { continue }
 
-            let bearing = DirectionCalculator.bearing(from: myLocation, to: peerLocation)
-            let distance = DirectionCalculator.distance(from: myLocation, to: peerLocation)
-            let rawRelative = DirectionCalculator.relativeDirection(bearing: bearing, heading: heading)
+            let rawBearing = DirectionCalculator.bearing(from: myLocation, to: peerLocation)
+            let rawDistance = DirectionCalculator.distance(from: myLocation, to: peerLocation)
 
-            peers[i].bearing = bearing
-            peers[i].distance = distance
-            peers[i].myGPSAccuracy = myAccuracy
-            
-            // Smooth the relative direction to avoid jittery arrow
-            if let prev = peers[i].relativeDirection {
-                let diff = DirectionCalculator.shortestAngleDiff(from: prev, to: rawRelative)
-                peers[i].relativeDirection = prev + diff * 0.3 // 30% interpolation per tick
+            // Heavy low-pass on bearing and distance: GPS positions jump a few
+            // meters between fixes even when both phones are static. At the 10 Hz
+            // tick rate these factors give ~2 s (bearing) and ~1 s (distance)
+            // time constants.
+            let bearing: Double
+            if let prev = peers[i].bearing {
+                let diff = DirectionCalculator.shortestAngleDiff(from: prev, to: rawBearing)
+                bearing = (prev + diff * 0.05 + 360).truncatingRemainder(dividingBy: 360)
             } else {
-                peers[i].relativeDirection = rawRelative
+                bearing = rawBearing
             }
+            peers[i].bearing = bearing
+
+            if let prev = peers[i].distance {
+                peers[i].distance = prev + (rawDistance - prev) * 0.1
+            } else {
+                peers[i].distance = rawDistance
+            }
+
+            peers[i].myGPSAccuracy = myAccuracy
+
+            // Relative direction = SMOOTHED bearing + LIVE heading: GPS noise is
+            // damped while rotating the phone still moves the arrow instantly
+            peers[i].relativeDirection = DirectionCalculator.relativeDirection(bearing: bearing, heading: heading)
         }
     }
 

@@ -6,10 +6,19 @@ struct ArrowView: View {
     let distance: Double?           // meters
     let peerName: String
     let distanceRange: Peer.DistanceRange
-    let isDirectionValid: Bool
+    let directionQuality: Peer.DirectionQuality
+    let trend: DistanceTrend
 
     @State private var pulse = false
     @State private var glow = false
+
+    private var trendLabel: String {
+        switch trend {
+        case .approaching: return "Tu te rapproches 🔥"
+        case .receding:    return "Tu t'éloignes 🧊"
+        case .stable:      return "Avance pour tester (chaud/froid)"
+        }
+    }
 
     private var arrowColors: [Color] {
         switch distanceRange {
@@ -42,8 +51,8 @@ struct ArrowView: View {
                     )
             }
 
-            if isDirectionValid {
-                // The arrow
+            if directionQuality != .unavailable {
+                // The arrow — dimmed when the GPS bearing is noisy
                 ArrowShape()
                     .fill(
                         LinearGradient(
@@ -57,8 +66,18 @@ struct ArrowView: View {
                     .rotationEffect(.degrees(direction))
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: direction)
                     .scaleEffect(pulse ? 1.05 : 1.0)
+                    .opacity(directionQuality == .approximate ? 0.55 : 1.0)
+
+                if directionQuality == .approximate {
+                    Text("Direction approximative")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
+                        .offset(y: 92)
+                }
             } else {
-                // Proximity orb (Hot/Cold game) when direction is unknown
+                // Proximity orb (Hot/Cold game) when direction is unknown:
+                // the distance trend tells the user whether they're walking
+                // the right way
                 VStack(spacing: 8) {
                     Circle()
                         .fill(
@@ -73,10 +92,10 @@ struct ArrowView: View {
                         .scaleEffect(pulse ? 1.3 : 0.8)
                         .opacity(pulse ? 1.0 : 0.6)
                         .shadow(color: arrowColors[0].opacity(0.8), radius: pulse ? 15 : 5)
-                    
-                    Text("Jeu de piste (Chaud/Froid)")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(arrowColors[0].opacity(0.8))
+
+                    Text(trendLabel)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(arrowColors[0].opacity(0.9))
                 }
             }
 

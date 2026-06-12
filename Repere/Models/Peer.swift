@@ -67,15 +67,20 @@ struct Peer: Identifiable {
         return relativeDirection
     }
     
-    /// Direction is only valid if UWB is actively providing an angle (peer in Field of View),
-    /// or if GPS distance exceeds the combined GPS uncertainty of both phones.
-    /// When the separation is smaller than the GPS error, the bearing is pure noise —
-    /// better to show the hot/cold orb than a random arrow.
-    var isDirectionValid: Bool {
-        if isUWBActive && uwbRelativeDirection != nil { return true }
-        guard let d = distance else { return false }
+    enum DirectionQuality {
+        case precise       // UWB angle, or GPS separation well above the GPS noise
+        case approximate   // GPS bearing usable but noisy — shown as a dimmed arrow
+        case unavailable   // bearing would be pure noise — hot/cold mode instead
+    }
+
+    /// How trustworthy the arrow is. The arrow stays visible whenever a bearing
+    /// exists (the whole point is knowing where to walk); only its confidence
+    /// changes. Below 15 m without UWB the bearing is physically meaningless.
+    var directionQuality: DirectionQuality {
+        if isUWBActive && uwbRelativeDirection != nil { return .precise }
+        guard let d = distance, relativeDirection != nil, d > 15 else { return .unavailable }
         let uncertainty = (myGPSAccuracy ?? 15) + (peerGPSAccuracy ?? 15)
-        return d > max(15, uncertainty)
+        return d > uncertainty ? .precise : .approximate
     }
     
     /// Which technology is providing the distance
@@ -85,17 +90,21 @@ struct Peer: Identifiable {
         return "GPS"
     }
 
-    /// Human-readable distance string
+    /// Human-readable distance string. Precision shown matches the precision
+    /// the source can actually deliver — displaying "22.7m" from GPS just
+    /// makes the number flicker without informing anyone.
     var displayDistance: String {
         guard let dist = activeDistance else { return "..." }
-        if dist < 1 {
-            return String(format: "%.0fcm", dist * 100)
-        } else if dist < 100 {
+        switch distanceSource {
+        case "UWB":
+            if dist < 1 { return String(format: "%.0fcm", dist * 100) }
             return String(format: "%.1fm", dist)
-        } else if dist < 1000 {
-            return String(format: "%.0fm", dist)
-        } else {
-            return String(format: "%.1fkm", dist / 1000)
+        case "BLE":
+            return "≈\(Int(dist.rounded()))m"
+        default: // GPS: round to 5 m steps
+            if dist >= 1000 { return String(format: "≈%.1fkm", dist / 1000) }
+            let rounded = max(5, (dist / 5).rounded() * 5)
+            return "≈\(Int(rounded))m"
         }
     }
 
@@ -114,4 +123,11 @@ struct Peer: Identifiable {
         case medium     // < 50m → orange
         case far        // > 50m → red
     }
+}
+
+/// Is the distance to a peer shrinking or growing? Drives the hot/cold mode.
+enum DistanceTrend {
+    case approaching
+    case receding
+    case stable
 }

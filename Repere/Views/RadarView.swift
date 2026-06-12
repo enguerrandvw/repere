@@ -13,6 +13,8 @@ struct RadarView: View {
     @State private var selectedPeerIndex: Int = 0
     @State private var showSettings = false
     @State private var radarRotation: Double = 0
+    /// peer id → recent (date, distance) samples, for the hot/cold trend
+    @State private var distanceHistory: [String: [(date: Date, distance: Double)]] = [:]
     @Environment(\.dismiss) private var dismiss
 
     init(displayName: String, groupCode: String, isHost: Bool) {
@@ -70,6 +72,7 @@ struct RadarView: View {
         .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
             updateDirections()
             syncBluetoothDistances()
+            updateDistanceHistory()
         }
         .onReceive(NotificationCenter.default.publisher(for: .uwbUpdate)) { notification in
             guard let userInfo = notification.userInfo,
@@ -228,7 +231,8 @@ struct RadarView: View {
                     distance: peer.activeDistance,
                     peerName: peer.displayName,
                     distanceRange: peer.distanceColor,
-                    isDirectionValid: peer.isDirectionValid
+                    directionQuality: peer.directionQuality,
+                    trend: trend(for: peer)
                 )
 
                 // Distance in big text
@@ -356,6 +360,31 @@ struct RadarView: View {
         }
     }
     
+    /// Record distance samples (6 s sliding window) to derive the hot/cold trend
+    private func updateDistanceHistory() {
+        let now = Date()
+        for peer in multipeerManager.peers {
+            guard let d = peer.activeDistance else { continue }
+            var history = distanceHistory[peer.id] ?? []
+            history.append((now, d))
+            history.removeAll { now.timeIntervalSince($0.date) > 6 }
+            distanceHistory[peer.id] = history
+        }
+    }
+
+    /// Compare current distance to ~6 s ago; ±2 m of change is real movement,
+    /// anything less is noise
+    private func trend(for peer: Peer) -> DistanceTrend {
+        guard let history = distanceHistory[peer.id],
+              let oldest = history.first,
+              let current = history.last,
+              Date().timeIntervalSince(oldest.date) > 2 else { return .stable }
+        let delta = current.distance - oldest.distance
+        if delta < -2 { return .approaching }
+        if delta > 2  { return .receding }
+        return .stable
+    }
+
     private func sourceIcon(for source: String) -> String {
         switch source {
         case "UWB": return "wave.3.right"
