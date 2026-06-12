@@ -404,6 +404,9 @@ struct RadarView: View {
                 diagRow("UWB", peer.uwbDistance.map { d in
                     String(format: "%.1f m (%@)", d, ageText(peer.lastUWBUpdate))
                 } ?? "—")
+                diagRow("Mesure reçue de lui", peer.remoteMeasuredDistance.map { d in
+                    "\(peer.remoteMeasuredSource ?? "?") ≈\(String(format: "%.1f", d)) m (\(ageText(peer.lastRemoteMeasuredUpdate)))"
+                } ?? "—")
                 diagRow("Source utilisée", peer.distanceSource)
                 diagRow("Marge GPS (toi + lui)",
                         "±\(Int((peer.myGPSAccuracy ?? 15) + (peer.peerGPSAccuracy ?? 15))) m")

@@ -9,7 +9,9 @@ struct PeerLocation: Codable {
     let timestamp: TimeInterval
     let displayName: String
     let groupCode: String
-    let accuracy: Double?   // sender's GPS horizontal accuracy (meters)
+    let accuracy: Double?           // sender's GPS horizontal accuracy (meters)
+    let measuredDistance: Double?   // sender's measured distance to the recipient (UWB/BLE)
+    let measuredSource: String?     // "UWB" or "BLE"
 }
 
 struct Peer: Identifiable {
@@ -28,6 +30,12 @@ struct Peer: Identifiable {
     var lastBluetoothUpdate: Date?
     var myGPSAccuracy: Double?        // our own GPS accuracy at last direction update (meters)
     var peerGPSAccuracy: Double?      // peer's reported GPS accuracy (meters)
+    // Measurement the PEER's phone made of the distance to us (UWB/BLE),
+    // shared over the link: both phones measure the same physical distance,
+    // so each should benefit from the other's best sensor
+    var remoteMeasuredDistance: Double?
+    var remoteMeasuredSource: String? // "UWB" or "BLE"
+    var lastRemoteMeasuredUpdate: Date?
 
     enum ConnectionStatus: String {
         case connected = "Connecté"
@@ -53,11 +61,22 @@ struct Peer: Identifiable {
         guard let last = lastBluetoothUpdate else { return false }
         return Date().timeIntervalSince(last) < 5
     }
-    
-    /// Best available distance: UWB > Bluetooth RSSI > GPS
+
+    /// True if the peer shared a measurement of us in the last 5 seconds
+    var isRemoteMeasurementActive: Bool {
+        guard let last = lastRemoteMeasuredUpdate else { return false }
+        return Date().timeIntervalSince(last) < 5
+    }
+
+    /// Best available distance, local or shared by the peer:
+    /// UWB (either phone) > BLE (either phone) > GPS
     var activeDistance: Double? {
         if isUWBActive, let d = uwbDistance { return d }
+        if isRemoteMeasurementActive, remoteMeasuredSource == "UWB",
+           let d = remoteMeasuredDistance { return d }
         if isBluetoothActive, let d = bluetoothDistance { return d }
+        if isRemoteMeasurementActive, remoteMeasuredSource == "BLE",
+           let d = remoteMeasuredDistance { return d }
         return distance
     }
     
@@ -86,10 +105,14 @@ struct Peer: Identifiable {
         return .unavailable
     }
     
-    /// Which technology is providing the distance
+    /// Which technology is providing the distance (local or shared by the peer)
     var distanceSource: String {
         if isUWBActive && uwbDistance != nil { return "UWB" }
+        if isRemoteMeasurementActive, remoteMeasuredSource == "UWB",
+           remoteMeasuredDistance != nil { return "UWB" }
         if isBluetoothActive && bluetoothDistance != nil { return "BLE" }
+        if isRemoteMeasurementActive, let source = remoteMeasuredSource,
+           remoteMeasuredDistance != nil { return source }
         return "GPS"
     }
 

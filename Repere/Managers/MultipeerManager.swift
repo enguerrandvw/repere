@@ -153,21 +153,40 @@ final class MultipeerManager: NSObject, ObservableObject {
               let session = session,
               !session.connectedPeers.isEmpty else { return }
 
-        let payload = PeerLocation(
-            latitude: location.latitude,
-            longitude: location.longitude,
-            timestamp: Date().timeIntervalSince1970,
-            displayName: displayName,
-            groupCode: groupCode,
-            accuracy: locationManager.gpsAccuracy
-        )
+        // One payload per recipient: each peer gets OUR measurement of the
+        // distance to THEM (UWB/BLE), so both phones converge on the best
+        // sensor either of them has
+        for mcPeer in session.connectedPeers {
+            var measuredDistance: Double?
+            var measuredSource: String?
+            if let peer = peers.first(where: { $0.id == mcPeer.displayName }) {
+                if peer.isUWBActive, let d = peer.uwbDistance {
+                    measuredDistance = d
+                    measuredSource = "UWB"
+                } else if peer.isBluetoothActive, let d = peer.bluetoothDistance {
+                    measuredDistance = d
+                    measuredSource = "BLE"
+                }
+            }
 
-        do {
-            let data = try JSONEncoder().encode(payload)
-            // Use unreliable mode for lower latency (like UDP)
-            try session.send(data, toPeers: session.connectedPeers, with: .unreliable)
-        } catch {
-            print("❌ Error sending location: \(error)")
+            let payload = PeerLocation(
+                latitude: location.latitude,
+                longitude: location.longitude,
+                timestamp: Date().timeIntervalSince1970,
+                displayName: displayName,
+                groupCode: groupCode,
+                accuracy: locationManager.gpsAccuracy,
+                measuredDistance: measuredDistance,
+                measuredSource: measuredSource
+            )
+
+            do {
+                let data = try JSONEncoder().encode(payload)
+                // Use unreliable mode for lower latency (like UDP)
+                try session.send(data, toPeers: [mcPeer], with: .unreliable)
+            } catch {
+                print("❌ Error sending location: \(error)")
+            }
         }
     }
 }
@@ -240,6 +259,11 @@ extension MultipeerManager: MCSessionDelegate {
                 self.peers[idx].connectionStatus = .connected
                 self.peers[idx].displayName = peerLocation.displayName
                 self.peers[idx].peerGPSAccuracy = peerLocation.accuracy
+                if let measured = peerLocation.measuredDistance {
+                    self.peers[idx].remoteMeasuredDistance = measured
+                    self.peers[idx].remoteMeasuredSource = peerLocation.measuredSource
+                    self.peers[idx].lastRemoteMeasuredUpdate = Date()
+                }
             } else {
                 var newPeer = Peer(
                     id: peerID.displayName,
