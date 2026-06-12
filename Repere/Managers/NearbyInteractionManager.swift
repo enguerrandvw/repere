@@ -7,11 +7,13 @@ import NearbyInteraction
 @available(iOS 16.0, *)
 final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDelegate {
 
+    static let shared = NearbyInteractionManager()
+
     private var sessions: [String: NISession] = [:]  // peerID → NISession
 
     @Published var uwbSupported: Bool = false
 
-    override init() {
+    override private init() {
         super.init()
         uwbSupported = NISession.isSupported
     }
@@ -30,19 +32,25 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
             return
         }
 
-        let session = NISession()
-        session.delegate = self
-        sessions[peerID] = session
+        // We should already have a session created for this peer in createToken()
+        guard let session = sessions[peerID] else {
+            print("❌ No NISession found for peer: \(peerID)")
+            return
+        }
 
         let config = NINearbyPeerConfiguration(peerToken: token)
         session.run(config)
         print("📡 UWB session started for peer: \(peerID)")
     }
 
-    /// Get this device's discovery token to share with peers
-    func getMyDiscoveryToken() -> Data? {
+    /// Create a new session and get its discovery token for a specific peer
+    func createToken(for peerID: String) -> Data? {
         guard NISession.isSupported else { return nil }
+        
         let session = NISession()
+        session.delegate = self
+        sessions[peerID] = session
+        
         guard let token = session.discoveryToken else { return nil }
         return try? NSKeyedArchiver.archivedData(
             withRootObject: token,
@@ -60,12 +68,16 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
 
     func session(_ session: NISession, didUpdate nearbyObjects: [NINearbyObject]) {
         guard let object = nearbyObjects.first else { return }
+        
+        // Find which peer this session belongs to
+        guard let peerID = sessions.first(where: { $0.value === session })?.key else { return }
 
         // Post notification with UWB data — picked up by RadarView
         NotificationCenter.default.post(
             name: .uwbUpdate,
             object: nil,
             userInfo: [
+                "peerID": peerID,
                 "distance": object.distance as Any,
                 "direction": object.direction as Any
             ]

@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import simd
 
 // MARK: - Main Radar View (the core screen with the arrow)
 struct RadarView: View {
@@ -64,6 +65,24 @@ struct RadarView: View {
         }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             updateDirections()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .uwbUpdate)) { notification in
+            guard let userInfo = notification.userInfo,
+                  let peerID = userInfo["peerID"] as? String,
+                  let distance = userInfo["distance"] as? Float,
+                  let idx = multipeerManager.peers.firstIndex(where: { $0.id == peerID }) else { return }
+            
+            // Override GPS distance with ultra-precise UWB distance
+            multipeerManager.peers[idx].distance = Double(distance)
+            
+            // Override GPS relative direction with UWB vector
+            if let direction = userInfo["direction"] as? simd_float3 {
+                // x = right, z = backwards. Azimuth = atan2(x, -z)
+                let azimuth = atan2(Double(direction.x), Double(-direction.z))
+                multipeerManager.peers[idx].relativeDirection = azimuth * 180 / .pi
+            }
+            
+            HapticManager.shared.proximityFeedback(distance: Double(distance))
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(

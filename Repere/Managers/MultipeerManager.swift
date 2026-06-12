@@ -78,13 +78,13 @@ final class MultipeerManager: NSObject, ObservableObject {
         }
     }
 
-    /// Send UWB discovery token to all connected peers
-    func sendDiscoveryToken(_ tokenData: Data) {
-        guard let session = session, !session.connectedPeers.isEmpty else { return }
+    /// Send UWB discovery token to a specific peer
+    func sendDiscoveryToken(_ tokenData: Data, to peer: MCPeerID) {
+        guard let session = session else { return }
         var markedData = uwbMarker
         markedData.append(tokenData)
         do {
-            try session.send(markedData, toPeers: session.connectedPeers, with: .reliable)
+            try session.send(markedData, toPeers: [peer], with: .reliable)
         } catch {
             print("❌ Error sending UWB token: \(error)")
         }
@@ -171,6 +171,13 @@ extension MultipeerManager: MCSessionDelegate {
                 }
                 self.isConnected = true
                 print("✅ Connected to: \(peerID.displayName)")
+                
+                // Exchange UWB tokens
+                if #available(iOS 16.0, *) {
+                    if let tokenData = NearbyInteractionManager.shared.createToken(for: peerID.displayName) {
+                        self.sendDiscoveryToken(tokenData, to: peerID)
+                    }
+                }
 
             case .notConnected:
                 if let idx = self.peers.firstIndex(where: { $0.id == peerID.displayName }) {
@@ -189,11 +196,12 @@ extension MultipeerManager: MCSessionDelegate {
     }
 
     func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
-        // Check for UWB token marker
         if data.count >= 2 && data[0] == 0xFF && data[1] == 0xFE {
             let tokenData = data.subdata(in: 2..<data.count)
             DispatchQueue.main.async {
-                self.onDiscoveryTokenReceived?(tokenData, peerID)
+                if #available(iOS 16.0, *) {
+                    NearbyInteractionManager.shared.startSession(for: peerID.displayName, with: tokenData)
+                }
             }
             return
         }
