@@ -12,6 +12,7 @@ struct RadarView: View {
     @StateObject private var bleProximity = BluetoothProximityManager()
     @State private var selectedPeerIndex: Int = 0
     @State private var showSettings = false
+    @State private var showDiagnostics = false
     @State private var radarRotation: Double = 0
     /// peer id → recent (date, distance) samples, for the hot/cold trend
     @State private var distanceHistory: [String: [(date: Date, distance: Double)]] = [:]
@@ -43,6 +44,12 @@ struct RadarView: View {
 
             VStack(spacing: 0) {
                 topBar
+
+                if showDiagnostics {
+                    diagnosticsPanel
+                        .transition(.opacity)
+                }
+
                 Spacer()
 
                 if multipeerManager.peers.isEmpty {
@@ -118,6 +125,15 @@ struct RadarView: View {
                     .font(.system(size: 20))
                     .foregroundColor(.white.opacity(0.6))
             }
+
+            Button {
+                withAnimation { showDiagnostics.toggle() }
+            } label: {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 20))
+                    .foregroundColor(showDiagnostics ? Color(hex: "00F5A0") : .white.opacity(0.6))
+            }
+            .padding(.leading, 12)
 
             Spacer()
 
@@ -360,6 +376,70 @@ struct RadarView: View {
         }
     }
     
+    // MARK: - Diagnostics Panel
+
+    /// Field-debugging overlay: shows the live state of every layer so a
+    /// screenshot is enough to know which one is failing
+    private var diagnosticsPanel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            diagRow("Connexion", multipeerManager.isConnected
+                ? "✅ \(multipeerManager.peers.filter { $0.connectionStatus == .connected }.count) pote(s)"
+                : "❌ aucune")
+            diagRow("GPS", gpsStatusText)
+            diagRow("Boussole", "\(Int(locationManager.heading))°")
+            diagRow("Puce UWB", NearbyInteractionManager.shared.uwbSupported
+                ? "✅ compatible"
+                : "❌ absente (iPhone 11+ requis)")
+
+            if let peer = selectedPeer {
+                Divider().background(Color.white.opacity(0.2))
+                diagRow("Position de \(peer.displayName)", ageText(peer.location != nil ? peer.lastUpdate : nil))
+                diagRow("Signal BLE", peer.bluetoothDistance.map { d in
+                    "≈\(Int(d)) m (\(ageText(peer.lastBluetoothUpdate)))"
+                } ?? "—")
+                diagRow("UWB", peer.uwbDistance.map { d in
+                    String(format: "%.1f m (%@)", d, ageText(peer.lastUWBUpdate))
+                } ?? "—")
+                diagRow("Source utilisée", peer.distanceSource)
+                diagRow("Marge GPS (toi + lui)",
+                        "±\(Int((peer.myGPSAccuracy ?? 15) + (peer.peerGPSAccuracy ?? 15))) m")
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.black.opacity(0.5))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1))
+        )
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+    }
+
+    private func diagRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.5))
+            Spacer()
+            Text(value)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundColor(.white.opacity(0.9))
+        }
+    }
+
+    private var gpsStatusText: String {
+        if let error = locationManager.locationError { return "❌ \(error)" }
+        guard locationManager.currentLocation != nil else { return "⏳ en attente…" }
+        return "✅ ±\(Int(locationManager.gpsAccuracy)) m"
+    }
+
+    private func ageText(_ date: Date?) -> String {
+        guard let date = date else { return "jamais reçu" }
+        let seconds = Date().timeIntervalSince(date)
+        if seconds < 1 { return "à l'instant" }
+        return String(format: "il y a %.0f s", seconds)
+    }
+
     /// Record distance samples (6 s sliding window) to derive the hot/cold trend
     private func updateDistanceHistory() {
         let now = Date()

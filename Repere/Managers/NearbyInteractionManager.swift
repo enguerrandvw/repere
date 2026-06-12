@@ -45,6 +45,9 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
 
         let session = getOrCreateSession(for: peerID)
         let config = NINearbyPeerConfiguration(peerToken: token)
+        // Camera assistance (ARKit) widens the UWB field of view and makes the
+        // direction far more reliable — this is what powers the AirTag-style arrow
+        config.isCameraAssistanceEnabled = true
         configs[peerID] = config
         session.run(config)
         print("📡 UWB session started for peer: \(peerID)")

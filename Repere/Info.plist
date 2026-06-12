@@ -64,5 +64,9 @@
     <!-- UWB — ultra-precise direction on iPhone 11+ -->
     <key>NSNearbyInteractionUsageDescription</key>
     <string>Repère utilise la puce U1 pour une localisation ultra-précise quand tes potes sont proches.</string>
+
+    <!-- Camera — assists UWB for a much more precise direction arrow -->
+    <key>NSCameraUsageDescription</key>
+    <string>Repère utilise la caméra pour affiner la direction vers tes potes quand ils sont tout proches (comme la localisation précise des AirTags).</string>
 </dict>
 </plist>
