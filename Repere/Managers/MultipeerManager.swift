@@ -16,6 +16,7 @@ final class MultipeerManager: NSObject, ObservableObject {
     private var advertiser: MCNearbyServiceAdvertiser?
     private var browser: MCNearbyServiceBrowser?
     private var sendTimer: Timer?
+    private var reconnectTimer: Timer?
 
     // MARK: - Published State
     @Published var peers: [Peer] = []
@@ -47,6 +48,7 @@ final class MultipeerManager: NSObject, ObservableObject {
         startSession()
         startAdvertising()
         startBrowsing()
+        startReconnectWatchdog()
     }
 
     /// Join an existing group by code
@@ -55,12 +57,15 @@ final class MultipeerManager: NSObject, ObservableObject {
         startSession()
         startAdvertising()
         startBrowsing()
+        startReconnectWatchdog()
     }
 
     /// Disconnect from everything
     func disconnect() {
         sendTimer?.invalidate()
         sendTimer = nil
+        reconnectTimer?.invalidate()
+        reconnectTimer = nil
         advertiser?.stopAdvertisingPeer()
         browser?.stopBrowsingForPeers()
         session?.disconnect()
@@ -146,6 +151,26 @@ final class MultipeerManager: NSObject, ObservableObject {
         browser = MCNearbyServiceBrowser(peer: myPeerID, serviceType: serviceType)
         browser?.delegate = self
         browser?.startBrowsingForPeers()
+    }
+
+    /// MC discovery goes stale after a connection drop: restarting the browser
+    /// and advertiser every 10 s while a peer is lost makes reconnection
+    /// reliable as soon as the phones are back in radio range
+    private func startReconnectWatchdog() {
+        reconnectTimer?.invalidate()
+        reconnectTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let hasLostPeer = self.peers.contains { $0.connectionStatus == .lost }
+            let nobodyConnected = !self.peers.isEmpty
+                && !self.peers.contains { $0.connectionStatus == .connected }
+            guard hasLostPeer || nobodyConnected else { return }
+
+            print("🔄 Reconnect nudge: restarting discovery")
+            self.browser?.stopBrowsingForPeers()
+            self.browser?.startBrowsingForPeers()
+            self.advertiser?.stopAdvertisingPeer()
+            self.advertiser?.startAdvertisingPeer()
+        }
     }
 
     private func sendLocation(locationManager: LocationManager) {

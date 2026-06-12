@@ -269,13 +269,13 @@ struct RadarView: View {
                 // Connection status badge
                 HStack(spacing: 6) {
                     Image(systemName: sourceIcon(for: peer.distanceSource))
-                    Text("\(peer.connectionStatus.rawValue) • \(peer.distanceSource)")
+                    Text(statusText(for: peer))
                 }
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(
                     peer.connectionStatus == .connected
                         ? Color(hex: "00F5A0")
-                        : Color(hex: "FF4757")
+                        : Color(hex: "F5A623")
                 )
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -283,10 +283,20 @@ struct RadarView: View {
                     Capsule().fill(
                         (peer.connectionStatus == .connected
                             ? Color(hex: "00F5A0")
-                            : Color(hex: "FF4757")
+                            : Color(hex: "F5A623")
                         ).opacity(0.15)
                     )
                 )
+
+                // Out of radio range: the arrow keeps pointing at the last
+                // known position — walking toward it brings the phones back
+                // in range and the connection resumes automatically
+                if peer.connectionStatus == .lost {
+                    Text("Marche vers sa dernière position,\nla connexion reviendra à portée (~50 m).")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.5))
+                        .multilineTextAlignment(.center)
+                }
             }
         }
     }
@@ -470,6 +480,14 @@ struct RadarView: View {
         if delta < -2 { return .approaching }
         if delta > 2  { return .receding }
         return .stable
+    }
+
+    private func statusText(for peer: Peer) -> String {
+        if peer.connectionStatus == .lost {
+            guard peer.location != nil else { return "Hors portée • aucune position reçue" }
+            return "Dernière position \(ageText(peer.lastUpdate))"
+        }
+        return "\(peer.connectionStatus.rawValue) • \(peer.distanceSource)"
     }
 
     private func sourceIcon(for source: String) -> String {
