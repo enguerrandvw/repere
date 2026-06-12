@@ -70,10 +70,10 @@ final class MultipeerManager: NSObject, ObservableObject {
         isConnected = false
     }
 
-    /// Start sending location every 0.25 seconds for maximum responsiveness
+    /// Start sending location every 0.5 seconds
     func startSendingLocation(locationManager: LocationManager) {
         sendTimer?.invalidate()
-        sendTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+        sendTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.sendLocation(locationManager: locationManager)
         }
     }
@@ -90,21 +90,25 @@ final class MultipeerManager: NSObject, ObservableObject {
         }
     }
 
-    /// Recalculate direction and distance for all peers
+    /// Recalculate direction and distance for all peers with smooth interpolation
     func updatePeerDirections(from myLocation: CLLocationCoordinate2D, heading: Double) {
         for i in peers.indices {
             guard let peerLocation = peers[i].location else { continue }
 
             let bearing = DirectionCalculator.bearing(from: myLocation, to: peerLocation)
             let distance = DirectionCalculator.distance(from: myLocation, to: peerLocation)
-            let relative = DirectionCalculator.relativeDirection(bearing: bearing, heading: heading)
+            let rawRelative = DirectionCalculator.relativeDirection(bearing: bearing, heading: heading)
 
             peers[i].bearing = bearing
             peers[i].distance = distance
-            peers[i].relativeDirection = relative
-
-            // Haptic feedback based on proximity
-            HapticManager.shared.proximityFeedback(distance: distance)
+            
+            // Smooth the relative direction to avoid jittery arrow
+            if let prev = peers[i].relativeDirection {
+                let diff = DirectionCalculator.shortestAngleDiff(from: prev, to: rawRelative)
+                peers[i].relativeDirection = prev + diff * 0.3 // 30% interpolation per tick
+            } else {
+                peers[i].relativeDirection = rawRelative
+            }
         }
     }
 
@@ -147,7 +151,8 @@ final class MultipeerManager: NSObject, ObservableObject {
 
         do {
             let data = try JSONEncoder().encode(payload)
-            try session.send(data, toPeers: session.connectedPeers, with: .reliable)
+            // Use unreliable mode for lower latency (like UDP)
+            try session.send(data, toPeers: session.connectedPeers, with: .unreliable)
         } catch {
             print("❌ Error sending location: \(error)")
         }

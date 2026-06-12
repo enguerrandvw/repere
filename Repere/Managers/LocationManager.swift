@@ -3,7 +3,8 @@ import CoreLocation
 import Combine
 
 /// Manages GPS location and compass heading.
-/// Works entirely via satellites — no cellular network needed.
+/// Includes a simple Kalman filter to smooth GPS jitter and
+/// a heading smoother for stable arrow direction.
 final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     private let manager = CLLocationManager()
@@ -12,13 +13,25 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     @Published var heading: Double = 0          // degrees from true north
     @Published var locationError: String?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
+    @Published var gpsAccuracy: Double = 999    // horizontal accuracy in meters
+
+    // MARK: - Kalman Filter State
+    private var kalmanLat: Double?
+    private var kalmanLon: Double?
+    private var kalmanVariance: Double = 1.0  // uncertainty
+    private let processNoise: Double = 0.00001 // how much we expect position to change
+
+    // MARK: - Heading Smoother
+    private var headingHistory: [Double] = []
+    private let headingSmoothingWindow = 5
 
     override init() {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        manager.distanceFilter = kCLDistanceFilterNone  // update continuously
-        manager.headingFilter = 0.5                     // update every 0.5° rotation
+        manager.distanceFilter = kCLDistanceFilterNone
+        manager.headingFilter = kCLHeadingFilterNone
+        manager.activityType = .otherNavigation
     }
 
     // MARK: - Public API
@@ -37,21 +50,86 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.stopUpdatingHeading()
     }
 
+    // MARK: - Kalman Filter
+
+    private func kalmanFilter(measurement: Double, measurementVariance: Double, current: inout Double?, variance: inout Double) -> Double {
+        guard let prior = current else {
+            // First measurement — initialize
+            current = measurement
+            variance = measurementVariance
+            return measurement
+        }
+
+        // Predict step (assume constant position)
+        let predictedVariance = variance + processNoise
+
+        // Update step
+        let kalmanGain = predictedVariance / (predictedVariance + measurementVariance)
+        let filtered = prior + kalmanGain * (measurement - prior)
+        variance = (1 - kalmanGain) * predictedVariance
+
+        current = filtered
+        return filtered
+    }
+
+    // MARK: - Heading Smoother (circular mean)
+
+    private func smoothHeading(_ newHeading: Double) -> Double {
+        headingHistory.append(newHeading)
+        if headingHistory.count > headingSmoothingWindow {
+            headingHistory.removeFirst()
+        }
+
+        // Circular mean to avoid 359°/1° jump issues
+        var sinSum = 0.0
+        var cosSum = 0.0
+        for h in headingHistory {
+            sinSum += sin(h * .pi / 180)
+            cosSum += cos(h * .pi / 180)
+        }
+        let avgRad = atan2(sinSum / Double(headingHistory.count),
+                           cosSum / Double(headingHistory.count))
+        var avgDeg = avgRad * 180 / .pi
+        if avgDeg < 0 { avgDeg += 360 }
+        return avgDeg
+    }
+
     // MARK: - CLLocationManagerDelegate
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
+
+        // Reject clearly bad readings (accuracy > 50m is unreliable)
+        guard location.horizontalAccuracy > 0 && location.horizontalAccuracy < 100 else { return }
+
+        // Convert accuracy to variance (smaller accuracy = more trustworthy)
+        let measurementVariance = location.horizontalAccuracy * location.horizontalAccuracy * 0.000000001
+
+        var latVariance = kalmanVariance
+        var lonVariance = kalmanVariance
+        let filteredLat = kalmanFilter(measurement: location.coordinate.latitude,
+                                        measurementVariance: measurementVariance,
+                                        current: &kalmanLat, variance: &latVariance)
+        let filteredLon = kalmanFilter(measurement: location.coordinate.longitude,
+                                        measurementVariance: measurementVariance,
+                                        current: &kalmanLon, variance: &lonVariance)
+        kalmanVariance = (latVariance + lonVariance) / 2
+
         DispatchQueue.main.async {
-            self.currentLocation = location.coordinate
+            self.currentLocation = CLLocationCoordinate2D(latitude: filteredLat, longitude: filteredLon)
+            self.gpsAccuracy = location.horizontalAccuracy
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        let rawHeading = newHeading.trueHeading >= 0
+            ? newHeading.trueHeading
+            : newHeading.magneticHeading
+
+        let smoothed = smoothHeading(rawHeading)
+
         DispatchQueue.main.async {
-            // Prefer true heading (GPS-calibrated), fallback to magnetic
-            self.heading = newHeading.trueHeading >= 0
-                ? newHeading.trueHeading
-                : newHeading.magneticHeading
+            self.heading = smoothed
         }
     }
 

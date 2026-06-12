@@ -43,6 +43,13 @@ struct DirectionCalculator {
         while relative < -180 { relative += 360 }
         return relative
     }
+    /// Shortest signed angular difference (handles 359° → 1° wrap correctly)
+    static func shortestAngleDiff(from a: Double, to b: Double) -> Double {
+        var diff = b - a
+        while diff > 180  { diff -= 360 }
+        while diff < -180 { diff += 360 }
+        return diff
+    }
 }
 
 // MARK: - Angle Conversion Helpers
