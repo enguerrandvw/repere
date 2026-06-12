@@ -11,7 +11,6 @@ struct PeerLocation: Codable {
     let groupCode: String
 }
 
-// MARK: - Peer Model
 struct Peer: Identifiable {
     let id: String
     var displayName: String
@@ -24,6 +23,8 @@ struct Peer: Identifiable {
     var uwbDistance: Double?          // precise UWB distance (meters)
     var uwbRelativeDirection: Double? // precise UWB direction (angle)
     var lastUWBUpdate: Date?
+    var bluetoothDistance: Double?    // Bluetooth RSSI-based distance (meters)
+    var lastBluetoothUpdate: Date?
 
     enum ConnectionStatus: String {
         case connected = "Connecté"
@@ -44,21 +45,40 @@ struct Peer: Identifiable {
         return Date().timeIntervalSince(last) < 3
     }
     
-    var activeDistance: Double? {
-        isUWBActive ? uwbDistance : distance
+    /// True if we received Bluetooth RSSI data in the last 5 seconds
+    var isBluetoothActive: Bool {
+        guard let last = lastBluetoothUpdate else { return false }
+        return Date().timeIntervalSince(last) < 5
     }
     
+    /// Best available distance: UWB > Bluetooth RSSI > GPS
+    var activeDistance: Double? {
+        if isUWBActive, let d = uwbDistance { return d }
+        if isBluetoothActive, let d = bluetoothDistance { return d }
+        return distance
+    }
+    
+    /// Best available direction: UWB > GPS (Bluetooth can't give direction)
     var activeDirection: Double? {
-        isUWBActive ? uwbRelativeDirection : relativeDirection
+        if isUWBActive, let d = uwbRelativeDirection { return d }
+        return relativeDirection
+    }
+    
+    /// Which technology is providing the distance
+    var distanceSource: String {
+        if isUWBActive && uwbDistance != nil { return "UWB" }
+        if isBluetoothActive && bluetoothDistance != nil { return "BLE" }
+        return "GPS"
     }
 
     /// Human-readable distance string
     var displayDistance: String {
-        if isUWBActive, let dist = uwbDistance {
+        guard let dist = activeDistance else { return "..." }
+        if dist < 1 {
+            return String(format: "%.0fcm", dist * 100)
+        } else if dist < 100 {
             return String(format: "%.1fm", dist)
-        }
-        guard let dist = distance else { return "..." }
-        if dist < 1000 {
+        } else if dist < 1000 {
             return String(format: "%.0fm", dist)
         } else {
             return String(format: "%.1fkm", dist / 1000)
@@ -68,16 +88,16 @@ struct Peer: Identifiable {
     /// Color range based on distance
     var distanceColor: DistanceRange {
         let d = activeDistance ?? 999
-        if d < 20  { return .veryClose }
-        if d < 50  { return .close }
-        if d < 150 { return .medium }
+        if d < 5   { return .veryClose }
+        if d < 20  { return .close }
+        if d < 50  { return .medium }
         return .far
     }
 
     enum DistanceRange {
-        case veryClose  // < 20m  → green
-        case close      // < 50m  → blue/teal
-        case medium     // < 150m → orange
-        case far        // > 150m → red
+        case veryClose  // < 5m  → green
+        case close      // < 20m → blue/teal
+        case medium     // < 50m → orange
+        case far        // > 50m → red
     }
 }

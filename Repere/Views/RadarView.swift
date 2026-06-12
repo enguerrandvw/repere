@@ -1,6 +1,5 @@
 import SwiftUI
 import Combine
-import simd
 
 // MARK: - Main Radar View (the core screen with the arrow)
 struct RadarView: View {
@@ -10,6 +9,7 @@ struct RadarView: View {
 
     @StateObject private var locationManager = LocationManager()
     @StateObject private var multipeerManager: MultipeerManager
+    @StateObject private var bleProximity = BluetoothProximityManager()
     @State private var selectedPeerIndex: Int = 0
     @State private var showSettings = false
     @State private var radarRotation: Double = 0
@@ -62,9 +62,11 @@ struct RadarView: View {
         .onDisappear {
             multipeerManager.disconnect()
             locationManager.stopTracking()
+            bleProximity.stop()
         }
         .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
             updateDirections()
+            syncBluetoothDistances()
         }
         .onReceive(NotificationCenter.default.publisher(for: .uwbUpdate)) { notification in
             guard let userInfo = notification.userInfo,
@@ -234,10 +236,8 @@ struct RadarView: View {
 
                 // Connection status badge
                 HStack(spacing: 6) {
-                    Image(systemName: peer.connectionStatus == .connected
-                          ? "checkmark.circle.fill"
-                          : "exclamationmark.circle.fill")
-                    Text(peer.connectionStatus.rawValue)
+                    Image(systemName: sourceIcon(for: peer.distanceSource))
+                    Text("\(peer.connectionStatus.rawValue) • \(peer.distanceSource)")
                 }
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(
@@ -316,6 +316,9 @@ struct RadarView: View {
         }
 
         multipeerManager.startSendingLocation(locationManager: locationManager)
+        
+        // Start Bluetooth RSSI proximity scanning
+        bleProximity.start(displayName: displayName, groupCode: groupCode)
     }
 
     private func updateDirections() {
@@ -324,6 +327,28 @@ struct RadarView: View {
             from: myLocation,
             heading: locationManager.heading
         )
+    }
+    
+    /// Sync Bluetooth RSSI distances into peer models
+    private func syncBluetoothDistances() {
+        for i in multipeerManager.peers.indices {
+            let peerName = multipeerManager.peers[i].displayName
+            // Try to find a BLE distance matching this peer's name
+            if let bleDistance = bleProximity.peerDistances.first(where: { 
+                peerName.localizedCaseInsensitiveContains($0.key) || $0.key.localizedCaseInsensitiveContains(peerName)
+            })?.value {
+                multipeerManager.peers[i].bluetoothDistance = bleDistance
+                multipeerManager.peers[i].lastBluetoothUpdate = Date()
+            }
+        }
+    }
+    
+    private func sourceIcon(for source: String) -> String {
+        switch source {
+        case "UWB": return "wave.3.right"
+        case "BLE": return "bluetooth"
+        default:    return "location.fill"
+        }
     }
 
     private func distanceColors(for range: Peer.DistanceRange) -> [Color] {

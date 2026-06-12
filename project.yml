@@ -35,3 +35,6 @@ targets:
       path: Repere/Repere.entitlements
       properties:
         com.apple.developer.nearby-interaction: true
+    dependencies:
+      - framework: CoreBluetooth.framework
+        embed: false
