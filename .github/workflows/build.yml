@@ -31,15 +31,14 @@ jobs:
         run: xcodegen generate
 
       # 5. Compiler l'app (sans signature pour sideload)
-      - name: 🔨 Build Archive
+      - name: 🔨 Build App
         run: |
-          xcodebuild archive \
+          xcodebuild build \
             -project Repere.xcodeproj \
             -scheme Repere \
             -configuration Release \
-            -archivePath build/Repere.xcarchive \
             -destination "generic/platform=iOS" \
-            -allowProvisioningUpdates \
+            -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -49,7 +48,7 @@ jobs:
       - name: 📦 Create IPA
         run: |
           mkdir -p build/Payload
-          cp -r build/Repere.xcarchive/Products/Applications/Repere.app build/Payload/
+          cp -r build/DerivedData/Build/Products/Release-iphoneos/Repere.app build/Payload/
           cd build
           zip -r Repere.ipa Payload
           echo "✅ IPA created successfully!"

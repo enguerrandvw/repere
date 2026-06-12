@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import simd
 
 // MARK: - Data sent over Bluetooth P2P
 struct PeerLocation: Codable {
