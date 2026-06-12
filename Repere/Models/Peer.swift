@@ -21,8 +21,9 @@ struct Peer: Identifiable {
     var relativeDirection: Double?  // relative to device heading (arrow rotation)
     var lastUpdate: Date
     var connectionStatus: ConnectionStatus
-    var uwbDistance: Float?         // precise UWB distance (meters)
-    var uwbDirection: simd_float3?  // precise UWB direction vector
+    var uwbDistance: Double?          // precise UWB distance (meters)
+    var uwbRelativeDirection: Double? // precise UWB direction (angle)
+    var lastUWBUpdate: Date?
 
     enum ConnectionStatus: String {
         case connected = "Connecté"
@@ -36,11 +37,25 @@ struct Peer: Identifiable {
     var isStale: Bool {
         Date().timeIntervalSince(lastUpdate) > 30
     }
+    
+    /// True if we received UWB data in the last 3 seconds
+    var isUWBActive: Bool {
+        guard let last = lastUWBUpdate else { return false }
+        return Date().timeIntervalSince(last) < 3
+    }
+    
+    var activeDistance: Double? {
+        isUWBActive ? uwbDistance : distance
+    }
+    
+    var activeDirection: Double? {
+        isUWBActive ? uwbRelativeDirection : relativeDirection
+    }
 
     /// Human-readable distance string
     var displayDistance: String {
-        if let uwbDist = uwbDistance {
-            return String(format: "%.1fm", uwbDist)
+        if isUWBActive, let dist = uwbDistance {
+            return String(format: "%.1fm", dist)
         }
         guard let dist = distance else { return "..." }
         if dist < 1000 {
@@ -52,7 +67,7 @@ struct Peer: Identifiable {
 
     /// Color range based on distance
     var distanceColor: DistanceRange {
-        let d = uwbDistance.map { Double($0) } ?? distance ?? 999
+        let d = activeDistance ?? 999
         if d < 20  { return .veryClose }
         if d < 50  { return .close }
         if d < 150 { return .medium }

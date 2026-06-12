@@ -72,15 +72,17 @@ struct RadarView: View {
                   let distance = userInfo["distance"] as? Float,
                   let idx = multipeerManager.peers.firstIndex(where: { $0.id == peerID }) else { return }
             
-            // Override GPS distance with ultra-precise UWB distance
-            multipeerManager.peers[idx].distance = Double(distance)
+            // Store ultra-precise UWB distance
+            multipeerManager.peers[idx].uwbDistance = Double(distance)
             
-            // Override GPS relative direction with UWB vector
+            // Store UWB relative direction vector
             if let direction = userInfo["direction"] as? simd_float3 {
                 // x = right, z = backwards. Azimuth = atan2(x, -z)
                 let azimuth = atan2(Double(direction.x), Double(-direction.z))
-                multipeerManager.peers[idx].relativeDirection = azimuth * 180 / .pi
+                multipeerManager.peers[idx].uwbRelativeDirection = azimuth * 180 / .pi
             }
+            
+            multipeerManager.peers[idx].lastUWBUpdate = Date()
             
             HapticManager.shared.proximityFeedback(distance: Double(distance))
         }
@@ -215,8 +217,8 @@ struct RadarView: View {
 
                 // Directional arrow
                 ArrowView(
-                    direction: peer.relativeDirection ?? 0,
-                    distance: peer.distance,
+                    direction: peer.activeDirection ?? 0,
+                    distance: peer.activeDistance,
                     peerName: peer.displayName,
                     distanceRange: peer.distanceColor
                 )
