@@ -22,3 +22,6 @@ Pods/
 # IDE
 .idea/
 *.xcuserdata/
+
+# Logs
+logs_*.txt
