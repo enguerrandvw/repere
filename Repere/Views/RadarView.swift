@@ -220,7 +220,8 @@ struct RadarView: View {
                     direction: peer.activeDirection ?? 0,
                     distance: peer.activeDistance,
                     peerName: peer.displayName,
-                    distanceRange: peer.distanceColor
+                    distanceRange: peer.distanceColor,
+                    showArrow: peer.distanceSource == "UWB" || peer.distanceSource == "GPS"
                 )
 
                 // Distance in big text

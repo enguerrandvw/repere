@@ -7,6 +7,8 @@ struct ArrowView: View {
     let peerName: String
     let distanceRange: Peer.DistanceRange
 
+    let showArrow: Bool             // true if we have a reliable direction
+
     @State private var pulse = false
     @State private var glow = false
 
@@ -41,25 +43,46 @@ struct ArrowView: View {
                     )
             }
 
-            // The arrow
-            ArrowShape()
-                .fill(
-                    LinearGradient(
-                        colors: arrowColors,
-                        startPoint: .top,
-                        endPoint: .bottom
+            if showArrow {
+                // The arrow
+                ArrowShape()
+                    .fill(
+                        LinearGradient(
+                            colors: arrowColors,
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                )
-                .frame(width: 60, height: 120)
-                .shadow(color: arrowColors[0].opacity(0.5), radius: 20)
-                .rotationEffect(.degrees(direction))
-                .animation(.spring(response: 0.5, dampingFraction: 0.7), value: direction)
-                .scaleEffect(pulse ? 1.05 : 1.0)
+                    .frame(width: 60, height: 120)
+                    .shadow(color: arrowColors[0].opacity(0.5), radius: 20)
+                    .rotationEffect(.degrees(direction))
+                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: direction)
+                    .scaleEffect(pulse ? 1.05 : 1.0)
 
-            // Center dot
-            Circle()
-                .fill(Color.white)
-                .frame(width: 8, height: 8)
+                // Center dot
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 8, height: 8)
+            } else {
+                // Direction unknown indicator (Hot/Cold radar)
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: arrowColors,
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 60, height: 60)
+                        .shadow(color: arrowColors[0].opacity(0.5), radius: 20)
+                        .scaleEffect(pulse ? 1.2 : 1.0)
+                        
+                    Image(systemName: "questionmark")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
         }
         .frame(width: 240, height: 240)
         .onAppear {
