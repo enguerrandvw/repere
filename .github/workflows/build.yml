@@ -24,7 +24,9 @@ jobs:
 
       # 3. Générer le projet Xcode
       - name: ⚙️ Generate Xcode Project
-        run: xcodegen generate
+        run: |
+          xcodegen generate
+          sed -i '' 's/objectVersion = 77;/objectVersion = 56;/g' Repere.xcodeproj/project.pbxproj
 
       # 5. Compiler l'app (sans signature pour sideload)
       - name: 🔨 Build App
