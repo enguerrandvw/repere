@@ -75,15 +75,21 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
         // Find which peer this session belongs to
         guard let peerID = sessions.first(where: { $0.value === session })?.key else { return }
 
+        var userInfo: [String: Any] = ["peerID": peerID]
+        if let distance = object.distance {
+            userInfo["distance"] = distance
+        }
+        if #available(iOS 15.0, *) {
+            if let angle = object.horizontalAngle {
+                userInfo["horizontalAngle"] = angle
+            }
+        }
+
         // Post notification with UWB data — picked up by RadarView
         NotificationCenter.default.post(
             name: .uwbUpdate,
             object: nil,
-            userInfo: [
-                "peerID": peerID,
-                "distance": object.distance as Any,
-                "direction": object.direction as Any
-            ]
+            userInfo: userInfo
         )
     }
 

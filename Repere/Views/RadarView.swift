@@ -69,22 +69,20 @@ struct RadarView: View {
         .onReceive(NotificationCenter.default.publisher(for: .uwbUpdate)) { notification in
             guard let userInfo = notification.userInfo,
                   let peerID = userInfo["peerID"] as? String,
-                  let distance = userInfo["distance"] as? Float,
                   let idx = multipeerManager.peers.firstIndex(where: { $0.id == peerID }) else { return }
             
-            // Store ultra-precise UWB distance
-            multipeerManager.peers[idx].uwbDistance = Double(distance)
+            if let distance = userInfo["distance"] as? Float {
+                // Store ultra-precise UWB distance
+                multipeerManager.peers[idx].uwbDistance = Double(distance)
+                HapticManager.shared.proximityFeedback(distance: Double(distance))
+            }
             
-            // Store UWB relative direction vector
-            if let direction = userInfo["direction"] as? simd_float3 {
-                // x = right, z = backwards. Azimuth = atan2(x, -z)
-                let azimuth = atan2(Double(direction.x), Double(-direction.z))
-                multipeerManager.peers[idx].uwbRelativeDirection = azimuth * 180 / .pi
+            // Store UWB relative direction angle
+            if let angle = userInfo["horizontalAngle"] as? Float {
+                multipeerManager.peers[idx].uwbRelativeDirection = Double(angle) * 180 / .pi
             }
             
             multipeerManager.peers[idx].lastUWBUpdate = Date()
-            
-            HapticManager.shared.proximityFeedback(distance: Double(distance))
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(
