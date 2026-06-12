@@ -80,6 +80,11 @@ struct RadarView: View {
             updateDirections()
             syncBluetoothDistances()
             updateDistanceHistory()
+            // Haptic guidance for the selected peer whatever the distance source
+            // (BLE/GPS included) — throttled internally by HapticManager
+            if let peer = selectedPeer, let d = peer.activeDistance {
+                HapticManager.shared.proximityFeedback(distance: d)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .uwbUpdate)) { notification in
             guard let userInfo = notification.userInfo,
@@ -89,7 +94,6 @@ struct RadarView: View {
             if let distance = userInfo["distance"] as? Float {
                 // Store ultra-precise UWB distance
                 multipeerManager.peers[idx].uwbDistance = Double(distance)
-                HapticManager.shared.proximityFeedback(distance: Double(distance))
             }
             
             // Store UWB relative direction angle

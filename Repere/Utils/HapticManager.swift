@@ -6,7 +6,9 @@ final class HapticManager {
 
     private var engine: CHHapticEngine?
     private var lastHapticDate: Date?
-    private var hapticsEnabled = true
+    // Read the persisted setting (SettingsView writes it via @AppStorage):
+    // without this, a user who disabled haptics gets them back on every launch
+    private var hapticsEnabled = UserDefaults.standard.object(forKey: "hapticsEnabled") as? Bool ?? true
 
     private init() {
         setupEngine()

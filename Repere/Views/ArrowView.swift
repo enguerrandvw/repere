@@ -15,8 +15,8 @@ struct ArrowView: View {
     private var trendLabel: String {
         switch trend {
         case .approaching: return "Tu te rapproches 🔥"
-        case .receding:    return "Tu t'éloignes 🧊"
-        case .stable:      return "Avance pour tester (chaud/froid)"
+        case .receding:    return "Mauvaise direction 🧊"
+        case .stable:      return "Bouge, je te guide 🚶"
         }
     }
 
@@ -75,10 +75,9 @@ struct ArrowView: View {
                         .offset(y: 92)
                 }
             } else {
-                // Proximity orb (Hot/Cold game) when direction is unknown:
-                // the distance trend tells the user whether they're walking
-                // the right way
-                VStack(spacing: 8) {
+                // Hot/cold mode when no trustworthy bearing exists (typical
+                // indoors beyond UWB range): the distance trend is the guidance
+                VStack(spacing: 12) {
                     Circle()
                         .fill(
                             RadialGradient(
@@ -94,8 +93,13 @@ struct ArrowView: View {
                         .shadow(color: arrowColors[0].opacity(0.8), radius: pulse ? 15 : 5)
 
                     Text(trendLabel)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(arrowColors[0].opacity(0.9))
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(arrowColors[0])
+
+                    Text("Marche dans une direction,\nje te dis si c'est la bonne.\nFlèche précise à moins de 5 m.")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.5))
+                        .multilineTextAlignment(.center)
                 }
             }
 

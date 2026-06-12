@@ -73,14 +73,17 @@ struct Peer: Identifiable {
         case unavailable   // bearing would be pure noise — hot/cold mode instead
     }
 
-    /// How trustworthy the arrow is. The arrow stays visible whenever a bearing
-    /// exists (the whole point is knowing where to walk); only its confidence
-    /// changes. Below 15 m without UWB the bearing is physically meaningless.
+    /// How trustworthy the arrow is.
+    /// Indoors the GPS error (±30-60 m) dwarfs the separation, so a GPS arrow
+    /// would point randomly — in that case we go full hot/cold mode instead
+    /// of showing a misleading arrow.
     var directionQuality: DirectionQuality {
         if isUWBActive && uwbRelativeDirection != nil { return .precise }
         guard let d = distance, relativeDirection != nil, d > 15 else { return .unavailable }
         let uncertainty = (myGPSAccuracy ?? 15) + (peerGPSAccuracy ?? 15)
-        return d > uncertainty ? .precise : .approximate
+        if d > uncertainty { return .precise }
+        if d > uncertainty / 2 { return .approximate }
+        return .unavailable
     }
     
     /// Which technology is providing the distance
