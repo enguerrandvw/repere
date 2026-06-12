@@ -22,11 +22,7 @@ jobs:
       - name: 🔧 Install XcodeGen
         run: brew install xcodegen
 
-      # 3. Sélectionner la version de Xcode
-      - name: 🍎 Select Xcode 15
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
-
-      # 4. Générer le projet Xcode
+      # 3. Générer le projet Xcode
       - name: ⚙️ Generate Xcode Project
         run: xcodegen generate
 
