@@ -6,8 +6,7 @@ struct ArrowView: View {
     let distance: Double?           // meters
     let peerName: String
     let distanceRange: Peer.DistanceRange
-
-    let showArrow: Bool             // true if we have a reliable direction
+    let isDirectionValid: Bool
 
     @State private var pulse = false
     @State private var glow = false
@@ -43,7 +42,7 @@ struct ArrowView: View {
                     )
             }
 
-            if showArrow {
+            if isDirectionValid {
                 // The arrow
                 ArrowShape()
                     .fill(
@@ -58,31 +57,33 @@ struct ArrowView: View {
                     .rotationEffect(.degrees(direction))
                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: direction)
                     .scaleEffect(pulse ? 1.05 : 1.0)
-
-                // Center dot
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 8, height: 8)
             } else {
-                // Direction unknown indicator (Hot/Cold radar)
-                ZStack {
+                // Proximity orb (Hot/Cold game) when direction is unknown
+                VStack(spacing: 8) {
                     Circle()
                         .fill(
-                            LinearGradient(
-                                colors: arrowColors,
-                                startPoint: .top,
-                                endPoint: .bottom
+                            RadialGradient(
+                                colors: [arrowColors[0], arrowColors[1].opacity(0.3)],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 40
                             )
                         )
                         .frame(width: 60, height: 60)
-                        .shadow(color: arrowColors[0].opacity(0.5), radius: 20)
-                        .scaleEffect(pulse ? 1.2 : 1.0)
-                        
-                    Image(systemName: "questionmark")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.white)
+                        .scaleEffect(pulse ? 1.3 : 0.8)
+                        .opacity(pulse ? 1.0 : 0.6)
+                        .shadow(color: arrowColors[0].opacity(0.8), radius: pulse ? 15 : 5)
+                    
+                    Text("Jeu de piste (Chaud/Froid)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(arrowColors[0].opacity(0.8))
                 }
             }
+
+            // Center dot
+            Circle()
+                .fill(Color.white)
+                .frame(width: 8, height: 8)
         }
         .frame(width: 240, height: 240)
         .onAppear {
