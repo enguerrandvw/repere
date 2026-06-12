@@ -19,6 +19,16 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
     }
 
     // MARK: - Public API
+    
+    private func getOrCreateSession(for peerID: String) -> NISession {
+        if let session = sessions[peerID] {
+            return session
+        }
+        let session = NISession()
+        session.delegate = self
+        sessions[peerID] = session
+        return session
+    }
 
     /// Start a UWB session with a peer using their discovery token
     func startSession(for peerID: String, with tokenData: Data) {
@@ -32,12 +42,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
             return
         }
 
-        // We should already have a session created for this peer in createToken()
-        guard let session = sessions[peerID] else {
-            print("❌ No NISession found for peer: \(peerID)")
-            return
-        }
-
+        let session = getOrCreateSession(for: peerID)
         let config = NINearbyPeerConfiguration(peerToken: token)
         session.run(config)
         print("📡 UWB session started for peer: \(peerID)")
@@ -47,9 +52,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
     func createToken(for peerID: String) -> Data? {
         guard NISession.isSupported else { return nil }
         
-        let session = NISession()
-        session.delegate = self
-        sessions[peerID] = session
+        let session = getOrCreateSession(for: peerID)
         
         guard let token = session.discoveryToken else { return nil }
         return try? NSKeyedArchiver.archivedData(
