@@ -82,6 +82,10 @@ struct RadarView: View {
             // Store UWB relative direction angle
             if let angle = userInfo["horizontalAngle"] as? Float {
                 multipeerManager.peers[idx].uwbRelativeDirection = Double(angle) * 180 / .pi
+            } else {
+                // If peer is out of UWB Field of View (±60°), the angle is nil.
+                // We clear it so we don't use stale UWB data or fall back to noisy GPS.
+                multipeerManager.peers[idx].uwbRelativeDirection = nil
             }
             
             multipeerManager.peers[idx].lastUWBUpdate = Date()

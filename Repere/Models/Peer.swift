@@ -64,9 +64,11 @@ struct Peer: Identifiable {
         return relativeDirection
     }
     
-    /// Direction is only valid if UWB is active, or if GPS distance is large enough (> 15m) to overcome GPS jitter
+    /// Direction is only valid if UWB is actively providing an angle (peer in Field of View), 
+    /// or if GPS distance is large enough (> 15m) to overcome GPS jitter
     var isDirectionValid: Bool {
-        if isUWBActive { return true }
+        if isUWBActive && uwbRelativeDirection != nil { return true }
+        // Fallback to GPS only if distance > 15m
         guard let d = distance else { return false }
         return d > 15
     }
