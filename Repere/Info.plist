@@ -58,6 +58,7 @@
     <key>NSBonjourServices</key>
     <array>
         <string>_repere-find._tcp</string>
+        <string>_repere-find._udp</string>
     </array>
 
     <!-- UWB — ultra-precise direction on iPhone 11+ -->

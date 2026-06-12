@@ -63,6 +63,9 @@ struct RadarView: View {
             multipeerManager.disconnect()
             locationManager.stopTracking()
             bleProximity.stop()
+            if #available(iOS 16.0, *) {
+                NearbyInteractionManager.shared.invalidateAll()
+            }
         }
         .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
             updateDirections()
@@ -314,8 +317,7 @@ struct RadarView: View {
         locationManager.requestPermission()
 
         if isHost {
-            _ = multipeerManager.createGroup()
-            multipeerManager.groupCode = groupCode
+            multipeerManager.createGroup(code: groupCode)
         } else {
             multipeerManager.joinGroup(code: groupCode)
         }
@@ -330,21 +332,27 @@ struct RadarView: View {
         guard let myLocation = locationManager.currentLocation else { return }
         multipeerManager.updatePeerDirections(
             from: myLocation,
-            heading: locationManager.heading
+            heading: locationManager.heading,
+            myAccuracy: locationManager.gpsAccuracy
         )
     }
-    
+
     /// Sync Bluetooth RSSI distances into peer models
     private func syncBluetoothDistances() {
+        let now = Date()
         for i in multipeerManager.peers.indices {
             let peerName = multipeerManager.peers[i].displayName
-            // Try to find a BLE distance matching this peer's name
-            if let bleDistance = bleProximity.peerDistances.first(where: { 
-                peerName.localizedCaseInsensitiveContains($0.key) || $0.key.localizedCaseInsensitiveContains(peerName)
-            })?.value {
-                multipeerManager.peers[i].bluetoothDistance = bleDistance
-                multipeerManager.peers[i].lastBluetoothUpdate = Date()
-            }
+            // Exact (case-insensitive) name match only — fuzzy "contains" matching
+            // could attach another peer's distance ("Alex" vs "Alexandre")
+            guard let reading = bleProximity.peerDistances.first(where: {
+                $0.key.caseInsensitiveCompare(peerName) == .orderedSame
+            })?.value else { continue }
+
+            // Keep the reading's own timestamp: stamping Date() here would make
+            // a frozen BLE reading look fresh forever and mask the GPS distance
+            guard now.timeIntervalSince(reading.updatedAt) < 5 else { continue }
+            multipeerManager.peers[i].bluetoothDistance = reading.distance
+            multipeerManager.peers[i].lastBluetoothUpdate = reading.updatedAt
         }
     }
     

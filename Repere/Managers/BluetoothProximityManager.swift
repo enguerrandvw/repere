@@ -19,8 +19,15 @@ final class BluetoothProximityManager: NSObject, ObservableObject {
     private var rssiTimer: Timer?
 
     // MARK: - Published State
-    /// peerName → (distance in meters, last update)
-    @Published var peerDistances: [String: Double] = [:]
+    struct ProximityReading {
+        var distance: Double   // meters
+        var updatedAt: Date
+    }
+    /// peerName → latest distance reading (timestamped so stale data can expire)
+    @Published var peerDistances: [String: ProximityReading] = [:]
+
+    /// peripheral UUID → peer display name (from advertisement local name or name characteristic)
+    private var peripheralNames: [UUID: String] = [:]
 
     // MARK: - Config
     private var displayName: String = ""
@@ -53,7 +60,11 @@ final class BluetoothProximityManager: NSObject, ObservableObject {
         centralManager?.stopScan()
         peripheralManager?.stopAdvertising()
         peripheralManager?.removeAllServices()
+        for (_, peripheral) in discoveredPeripherals {
+            centralManager?.cancelPeripheralConnection(peripheral)
+        }
         discoveredPeripherals.removeAll()
+        peripheralNames.removeAll()
         rssiHistory.removeAll()
         peerDistances.removeAll()
     }
@@ -122,20 +133,21 @@ extension BluetoothProximityManager: CBCentralManagerDelegate {
         let rssiValue = RSSI.doubleValue
         guard rssiValue < 0 && rssiValue > -100 else { return } // Filter invalid
 
-        // Extract peer name from advertisement local name
-        let peerName: String
+        // Remember the peer name from the advertisement local name.
+        // No fallback to UUID here: an unnamed entry could never be matched
+        // to a peer anyway — we wait for the name characteristic instead.
         if let localName = advertisementData[CBAdvertisementDataLocalNameKey] as? String {
-            peerName = localName
-        } else {
-            peerName = peripheral.identifier.uuidString.prefix(8).description
+            peripheralNames[peripheral.identifier] = localName
         }
 
         // Smooth and convert
         let smoothedRSSI = smoothRSSI(for: peripheral.identifier, newRSSI: rssiValue)
         let distance = rssiToDistance(smoothedRSSI)
 
-        DispatchQueue.main.async {
-            self.peerDistances[peerName] = distance
+        if let peerName = peripheralNames[peripheral.identifier] {
+            DispatchQueue.main.async {
+                self.peerDistances[peerName] = ProximityReading(distance: distance, updatedAt: Date())
+            }
         }
 
         // Connect for continuous RSSI if not already
@@ -183,20 +195,15 @@ extension BluetoothProximityManager: CBPeripheralDelegate {
               let data = characteristic.value,
               let name = String(data: data, encoding: .utf8) else { return }
 
-        // We now know this peripheral's display name
-        // Update the distance entry with the correct name
-        let tempName = peripheral.name ?? peripheral.identifier.uuidString.prefix(8).description
-        
+        // The name characteristic is authoritative: migrate any reading
+        // recorded under the advertisement name to the real display name.
+        let oldName = peripheralNames[peripheral.identifier]
+        peripheralNames[peripheral.identifier] = name
+
         DispatchQueue.main.async {
-            // First check if it's already under the correct name
-            if self.peerDistances[name] != nil {
-                return
-            }
-            
-            // Otherwise, migrate the old distance to the new name
-            if let oldDistance = self.peerDistances[tempName] {
-                self.peerDistances.removeValue(forKey: tempName)
-                self.peerDistances[name] = oldDistance
+            if let oldName = oldName, oldName != name,
+               let reading = self.peerDistances.removeValue(forKey: oldName) {
+                self.peerDistances[name] = reading
             }
         }
     }
@@ -205,16 +212,15 @@ extension BluetoothProximityManager: CBPeripheralDelegate {
         let rssiValue = RSSI.doubleValue
         guard rssiValue < 0 && rssiValue > -100 else { return }
 
+        // Key by the name we learned at discovery / from the name characteristic —
+        // NOT peripheral.name, which is the device's system name ("iPhone de X")
+        guard let peerName = peripheralNames[peripheral.identifier] else { return }
+
         let smoothedRSSI = smoothRSSI(for: peripheral.identifier, newRSSI: rssiValue)
         let distance = rssiToDistance(smoothedRSSI)
 
-        // Find peer name for this peripheral
-        let peerName = discoveredPeripherals.first(where: { $0.key == peripheral.identifier })
-            .map { _ in peripheral.name ?? peripheral.identifier.uuidString.prefix(8).description }
-            ?? "Unknown"
-
         DispatchQueue.main.async {
-            self.peerDistances[peerName] = distance
+            self.peerDistances[peerName] = ProximityReading(distance: distance, updatedAt: Date())
         }
     }
 }

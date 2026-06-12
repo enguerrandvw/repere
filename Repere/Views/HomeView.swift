@@ -52,6 +52,7 @@ struct HomeView: View {
         .sheet(isPresented: $isCreating) {
             CreateGroupSheet(displayName: displayName) { code in
                 generatedCode = code
+                groupCode = ""
                 showRadar = true
             }
             .presentationDetents([.medium])
@@ -59,6 +60,9 @@ struct HomeView: View {
         }
         .sheet(isPresented: $isJoining) {
             JoinGroupSheet(displayName: displayName) { code in
+                // Clear any previously generated code, otherwise the radar
+                // would reopen as host with the old code instead of joining
+                generatedCode = ""
                 groupCode = code
                 showRadar = true
             }

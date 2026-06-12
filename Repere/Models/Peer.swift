@@ -9,6 +9,7 @@ struct PeerLocation: Codable {
     let timestamp: TimeInterval
     let displayName: String
     let groupCode: String
+    let accuracy: Double?   // sender's GPS horizontal accuracy (meters)
 }
 
 struct Peer: Identifiable {
@@ -25,6 +26,8 @@ struct Peer: Identifiable {
     var lastUWBUpdate: Date?
     var bluetoothDistance: Double?    // Bluetooth RSSI-based distance (meters)
     var lastBluetoothUpdate: Date?
+    var myGPSAccuracy: Double?        // our own GPS accuracy at last direction update (meters)
+    var peerGPSAccuracy: Double?      // peer's reported GPS accuracy (meters)
 
     enum ConnectionStatus: String {
         case connected = "Connecté"
@@ -64,13 +67,15 @@ struct Peer: Identifiable {
         return relativeDirection
     }
     
-    /// Direction is only valid if UWB is actively providing an angle (peer in Field of View), 
-    /// or if GPS distance is large enough (> 15m) to overcome GPS jitter
+    /// Direction is only valid if UWB is actively providing an angle (peer in Field of View),
+    /// or if GPS distance exceeds the combined GPS uncertainty of both phones.
+    /// When the separation is smaller than the GPS error, the bearing is pure noise —
+    /// better to show the hot/cold orb than a random arrow.
     var isDirectionValid: Bool {
         if isUWBActive && uwbRelativeDirection != nil { return true }
-        // Fallback to GPS only if distance > 15m
         guard let d = distance else { return false }
-        return d > 15
+        let uncertainty = (myGPSAccuracy ?? 15) + (peerGPSAccuracy ?? 15)
+        return d > max(15, uncertainty)
     }
     
     /// Which technology is providing the distance

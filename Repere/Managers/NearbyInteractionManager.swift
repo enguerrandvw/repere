@@ -10,6 +10,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
     static let shared = NearbyInteractionManager()
 
     private var sessions: [String: NISession] = [:]  // peerID → NISession
+    private var configs: [String: NINearbyPeerConfiguration] = [:]  // peerID → running config
 
     @Published var uwbSupported: Bool = false
 
@@ -44,6 +45,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
 
         let session = getOrCreateSession(for: peerID)
         let config = NINearbyPeerConfiguration(peerToken: token)
+        configs[peerID] = config
         session.run(config)
         print("📡 UWB session started for peer: \(peerID)")
     }
@@ -65,6 +67,7 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
     func invalidateAll() {
         sessions.values.forEach { $0.invalidate() }
         sessions.removeAll()
+        configs.removeAll()
     }
 
     // MARK: - NISessionDelegate
@@ -102,10 +105,21 @@ final class NearbyInteractionManager: NSObject, ObservableObject, NISessionDeleg
     }
 
     func sessionSuspensionEnded(_ session: NISession) {
+        // After a suspension the config must be re-run, otherwise no more updates arrive
+        if let peerID = sessions.first(where: { $0.value === session })?.key,
+           let config = configs[peerID] {
+            session.run(config)
+        }
         print("▶️ UWB session resumed")
     }
 
     func session(_ session: NISession, didInvalidateWith error: Error) {
+        // An invalidated session is dead: drop it so a fresh one can be
+        // created on the next token exchange
+        if let peerID = sessions.first(where: { $0.value === session })?.key {
+            sessions.removeValue(forKey: peerID)
+            configs.removeValue(forKey: peerID)
+        }
         print("❌ UWB session invalidated: \(error)")
     }
 }

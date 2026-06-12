@@ -40,14 +40,13 @@ final class MultipeerManager: NSObject, ObservableObject {
 
     // MARK: - Public API
 
-    /// Create a new group and start advertising + browsing
-    func createGroup() -> String {
-        let code = String(format: "%04d", Int.random(in: 0...9999))
+    /// Create a new group with the code shown to the user and start advertising + browsing.
+    /// The code MUST be set before the advertiser starts: discoveryInfo is captured at creation.
+    func createGroup(code: String) {
         groupCode = code
         startSession()
         startAdvertising()
         startBrowsing()
-        return code
     }
 
     /// Join an existing group by code
@@ -91,7 +90,7 @@ final class MultipeerManager: NSObject, ObservableObject {
     }
 
     /// Recalculate direction and distance for all peers with smooth interpolation
-    func updatePeerDirections(from myLocation: CLLocationCoordinate2D, heading: Double) {
+    func updatePeerDirections(from myLocation: CLLocationCoordinate2D, heading: Double, myAccuracy: Double) {
         for i in peers.indices {
             guard let peerLocation = peers[i].location else { continue }
 
@@ -101,6 +100,7 @@ final class MultipeerManager: NSObject, ObservableObject {
 
             peers[i].bearing = bearing
             peers[i].distance = distance
+            peers[i].myGPSAccuracy = myAccuracy
             
             // Smooth the relative direction to avoid jittery arrow
             if let prev = peers[i].relativeDirection {
@@ -146,7 +146,8 @@ final class MultipeerManager: NSObject, ObservableObject {
             longitude: location.longitude,
             timestamp: Date().timeIntervalSince1970,
             displayName: displayName,
-            groupCode: groupCode
+            groupCode: groupCode,
+            accuracy: locationManager.gpsAccuracy
         )
 
         do {
@@ -226,6 +227,7 @@ extension MultipeerManager: MCSessionDelegate {
                 self.peers[idx].lastUpdate = Date()
                 self.peers[idx].connectionStatus = .connected
                 self.peers[idx].displayName = peerLocation.displayName
+                self.peers[idx].peerGPSAccuracy = peerLocation.accuracy
             } else {
                 var newPeer = Peer(
                     id: peerID.displayName,
@@ -234,6 +236,7 @@ extension MultipeerManager: MCSessionDelegate {
                     connectionStatus: .connected
                 )
                 newPeer.location = coordinate
+                newPeer.peerGPSAccuracy = peerLocation.accuracy
                 self.peers.append(newPeer)
             }
         }
@@ -251,14 +254,13 @@ extension MultipeerManager: MCNearbyServiceAdvertiserDelegate {
                     didReceiveInvitationFromPeer peerID: MCPeerID,
                     withContext context: Data?,
                     invitationHandler: @escaping (Bool, MCSession?) -> Void) {
-        // Accept invitations from peers in the same group
+        // Only accept invitations from peers in the same group
         if let context = context,
            let info = try? JSONDecoder().decode([String: String].self, from: context),
            info["group"] == groupCode {
             invitationHandler(true, session)
         } else {
-            // Accept anyway for V1 simplicity
-            invitationHandler(true, session)
+            invitationHandler(false, nil)
         }
     }
 
@@ -273,7 +275,10 @@ extension MultipeerManager: MCNearbyServiceBrowserDelegate {
     func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String: String]?) {
         // Only connect to peers in the same group
         guard let info = info, info["group"] == groupCode else { return }
-        guard peerID.displayName != myPeerID.displayName else { return }
+        // Both sides browse AND advertise: if both invite simultaneously the MC
+        // handshake often fails. Only the lexicographically smaller peer invites;
+        // the other side accepts via its advertiser.
+        guard myPeerID.displayName < peerID.displayName else { return }
 
         print("📡 Found peer: \(info["name"] ?? peerID.displayName)")
 

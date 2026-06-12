@@ -16,10 +16,14 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     @Published var gpsAccuracy: Double = 999    // horizontal accuracy in meters
 
     // MARK: - Kalman Filter State
+    // All variances are in degrees² so they stay comparable to the measurement variance.
     private var kalmanLat: Double?
     private var kalmanLon: Double?
-    private var kalmanVariance: Double = 1.0  // uncertainty
-    private let processNoise: Double = 0.00001 // how much we expect position to change
+    private var kalmanLatVariance: Double = 0
+    private var kalmanLonVariance: Double = 0
+    /// Expected movement between GPS fixes: ~3 m at walking pace → (3 / 111320)² degrees²
+    private let processNoise: Double = 7.5e-10
+    private let metersPerDegree: Double = 111_320
 
     // MARK: - Heading Smoother
     private var headingHistory: [Double] = []
@@ -99,21 +103,19 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
 
-        // Reject clearly bad readings (accuracy > 50m is unreliable)
+        // Reject clearly bad readings (accuracy > 100m is unreliable)
         guard location.horizontalAccuracy > 0 && location.horizontalAccuracy < 100 else { return }
 
-        // Convert accuracy to variance (smaller accuracy = more trustworthy)
-        let measurementVariance = location.horizontalAccuracy * location.horizontalAccuracy * 0.000000001
+        // Convert accuracy (meters) to measurement variance in degrees²
+        let accuracyDegrees = location.horizontalAccuracy / metersPerDegree
+        let measurementVariance = accuracyDegrees * accuracyDegrees
 
-        var latVariance = kalmanVariance
-        var lonVariance = kalmanVariance
         let filteredLat = kalmanFilter(measurement: location.coordinate.latitude,
                                         measurementVariance: measurementVariance,
-                                        current: &kalmanLat, variance: &latVariance)
+                                        current: &kalmanLat, variance: &kalmanLatVariance)
         let filteredLon = kalmanFilter(measurement: location.coordinate.longitude,
                                         measurementVariance: measurementVariance,
-                                        current: &kalmanLon, variance: &lonVariance)
-        kalmanVariance = (latVariance + lonVariance) / 2
+                                        current: &kalmanLon, variance: &kalmanLonVariance)
 
         DispatchQueue.main.async {
             self.currentLocation = CLLocationCoordinate2D(latitude: filteredLat, longitude: filteredLon)
@@ -122,6 +124,9 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        // Negative accuracy means the compass reading is invalid (calibration needed)
+        guard newHeading.headingAccuracy >= 0 else { return }
+
         let rawHeading = newHeading.trueHeading >= 0
             ? newHeading.trueHeading
             : newHeading.magneticHeading
