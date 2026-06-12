@@ -1,0 +1,64 @@
+name: Build Repere IPA
+
+# Quand lancer le build :
+# - À chaque push sur main
+# - Manuellement depuis l'onglet Actions de GitHub
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    name: 🏗️ Build IPA
+    runs-on: macos-14  # Mac virtuel gratuit avec Xcode pré-installé
+
+    steps:
+      # 1. Récupérer le code
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Installer XcodeGen (génère le .xcodeproj à partir de project.yml)
+      - name: 🔧 Install XcodeGen
+        run: brew install xcodegen
+
+      # 3. Sélectionner la version de Xcode
+      - name: 🍎 Select Xcode 15
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+      # 4. Générer le projet Xcode
+      - name: ⚙️ Generate Xcode Project
+        run: xcodegen generate
+
+      # 5. Compiler l'app (sans signature pour sideload)
+      - name: 🔨 Build Archive
+        run: |
+          xcodebuild archive \
+            -project Repere.xcodeproj \
+            -scheme Repere \
+            -configuration Release \
+            -archivePath build/Repere.xcarchive \
+            -destination "generic/platform=iOS" \
+            -allowProvisioningUpdates \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS=""
+
+      # 6. Créer le fichier IPA
+      - name: 📦 Create IPA
+        run: |
+          mkdir -p build/Payload
+          cp -r build/Repere.xcarchive/Products/Applications/Repere.app build/Payload/
+          cd build
+          zip -r Repere.ipa Payload
+          echo "✅ IPA created successfully!"
+          ls -la Repere.ipa
+
+      # 7. Uploader l'IPA comme artifact téléchargeable
+      - name: 📤 Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Repere-IPA
+          path: build/Repere.ipa
+          retention-days: 30

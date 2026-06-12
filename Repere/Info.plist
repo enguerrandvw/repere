@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App Identity -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>fr</string>
+    <key>CFBundleDisplayName</key>
+    <string>Repère</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+
+    <!-- UI Configuration -->
+    <key>UILaunchStoryboardName</key>
+    <string></string>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>armv7</string>
+    </array>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>UIApplicationSupportsIndirectInputEvents</key>
+    <true/>
+
+    <!-- ===== PERMISSIONS ===== -->
+
+    <!-- GPS — works via satellites, no cellular needed -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Repère utilise ta position GPS pour guider tes potes vers toi, même sans réseau mobile.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Repère utilise ta position en arrière-plan pour que tes potes puissent te retrouver.</string>
+
+    <!-- Bluetooth — peer-to-peer, no internet needed -->
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Repère utilise le Bluetooth pour communiquer avec les téléphones de tes potes sans réseau.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>Repère utilise le Bluetooth pour échanger ta position avec tes potes.</string>
+
+    <!-- Local Network — for MultipeerConnectivity WiFi P2P -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Repère utilise le réseau local pour communiquer avec les appareils de tes potes à proximité.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_repere-find._tcp</string>
+    </array>
+
+    <!-- UWB — ultra-precise direction on iPhone 11+ -->
+    <key>NSNearbyInteractionUsageDescription</key>
+    <string>Repère utilise la puce U1 pour une localisation ultra-précise quand tes potes sont proches.</string>
+</dict>
+</plist>
